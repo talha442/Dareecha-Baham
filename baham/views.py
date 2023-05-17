@@ -3,6 +3,7 @@ from django.template import loader
 from django.http import HttpResponse
 from .models import Vehicle
 from .enum_types import VehicleType
+from django.shortcuts import get_object_or_404
 
 # Create your views here.
 def home(request):
@@ -39,8 +40,6 @@ def view_vehicles(request):
     return HttpResponse (template.render(context,request=request))
 
 
-
-
 def create_vehicle(request):
     template = loader.get_template(template_name='createVehicle.html')
     context = {
@@ -52,5 +51,13 @@ def create_vehicle(request):
     return HttpResponse (template.render(context,request=request))
     
 
+def delete_vehicle(request, id):
+    obj = get_object_or_404(Vehicle, pk = id)
+    obj.delete(voided_by=request.user)
+    return HttpResponseRedirect(reverse(view_vehicles))
 
+def undelete_vehicle(request, id):
+    obj = get_object_or_404(Vehicle, pk = id)
+    obj.undelete()
+    return HttpResponseRedirect(reverse(view_vehicles))
 

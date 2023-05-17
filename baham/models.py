@@ -1,123 +1,152 @@
+from django.utils.timezone import now
+from django.contrib.auth.models import User
 from django.db import models
 from django.utils import timezone
+from uuid import uuid4
 
+from baham.constants import COLOURS, TOWNS
+from baham.enum_types import VehicleType, VehicleStatus, UserType
 
+class VehicleModel(models.Model):
+    type = models.CharField(max_length=50, choices=[(t.name, t.value) for t in VehicleType],
+                            help_text="Select the vehicle chassis type")
+    capacity = models.PositiveSmallIntegerField(null=False, default=2)
+    #Audit Fields
+    date_created = models.DateTimeField(default=timezone.now, null=True, editable=False, related_name='vehiclemodel_creator')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, editable=False)
+    date_updated = models.DateTimeField(null=True)
+    updated_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, related_name='vehiclemodel_updater')
+    isVoided = models.BooleanField(default=False, null=True)
+    date_voided = models.DateTimeField(null=True)
+    voided_by = models.ForeignKey(User,null=True, on_delete=models.CASCADE, related_name='vehiclemodel_voided')
+    void_reason = models.CharField(max_length=1024)
+    uuid = models.UUIDField(default=uuid4, editable=False, unique=True)
+
+    class Meta:
+        db_table = "baham_vehicle_model"
+
+    def __str__(self):
+        return f"{self.vendor} {self.model}"
+
+    def update(self, updated_by=None, *args, **kwargs):
+        self.date_updated = timezone.now
+        self.updated_by = updated_by
+        if not updated_by:
+            updated_by = User.objects.get(pk=1)
+        self.updated_by = updated_by
+        self.save()
+
+    def delete(self, voided_by=None, *args, **kwargs):
+        self.isVoided = True
+        self.date_voided = timezone.now
+        if not self.void_reason:
+            self.void_reason = 'Voided without reason'
+        if not voided_by:
+            voided_by = User.objects.get(pk=1)
+        self.voided_by = voided_by
+        self.save()
+
+    def undelete(self, *args, **kwargs):
+        if self.isVoided:
+            self.isVoided = False
+            self.date_voided = None
+            self.void_reason = None
+            self.save()
+    def purge(self, *args, **kwargs):
+        self.delete()
 
 class Vehicle(models.Model):
-
-    VEHICLE_TYPE_CHOICES = [
-        ('motorcycle', 'Motorcycle'),
-        ('sedan', 'Sedan'),
-        ('hatchback', 'Hatchback'),
-        ('suv', 'SUV'),
-        ('van', 'Van'),
-    ]
-
-    model = models.CharField(max_length=100)
-    manufacturer = models.CharField(max_length=100)
-    vehicle_type = models.CharField(max_length=20, choices=VEHICLE_TYPE_CHOICES)
-    sitting_capacity = models.IntegerField()
-    color = models.CharField(max_length=100)
-    registration_number = models.CharField(max_length=20, unique=True)
-    status = models.CharField(max_length=10, default='inactive')
-    front_picture = models.ImageField(upload_to='vehicle_pictures/', blank=True)
-    side_picture = models.ImageField(upload_to='vehicle_pictures/', blank=True)
-    creation_date = models.DateTimeField(default=timezone.now)
-    updation_date = models.DateTimeField(default=timezone.now)
-    created_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='created_vehicles')
-    updated_by = models.ForeignKey('User', on_delete=models.SET_NULL, null=True, related_name='updated_vehicles')
-    is_active = models.BooleanField(default=True)
+    vehicle_id = models.AutoField(primary_key=True, db_column='id')
+    status = models.CharField(max_length=50, choices=[(t.name, t.value) for t in VehicleStatus])
+    picture1 = models.ImageField(upload_to='pictures', null=True)
+    picture2 = models.ImageField(upload_to='pictures', null=True)
+    #Audit Fields
+    date_created = models.DateTimeField(default=timezone.now, null=True, editable=False, related_name='vehicle_creator')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, editable=False)
+    date_updated = models.DateTimeField(null=True)
+    updated_by = models.ForeignKey(User,null=True, on_delete=models.CASCADE, related_name='vehcile_updater')
+    isVoided = models.BooleanField(default=False, null=True)
+    date_voided = models.DateTimeField(null=True)
+    voided_by = models.ForeignKey(User,null=True, on_delete=models.CASCADE, related_name='vehicle_voided')
+    void_reason = models.CharField(null=True, max_length=1024)
+    uuid = models.UUIDField(default=uuid4, editable=False, unique=True)
 
     def __str__(self):
-        return f"{self.manufacturer} {self.model}"
+        return f"{self.model.vendor} {self.model.model} {self.colour}"
 
-    def delete(self, *args, **kwargs):
-        if not self.user.is_staff:
-            raise PermissionDenied("Only staff members have permission to delete")
-        super().delete(*args, **kwargs)
+    def update(self, updated_by = None, *args, **kwargs):
+        self.date_updated = timezone.now
+        self.updated_by = updated_by
+        if not updated_by:
+            updated_by = User.objects.get(pk=1)
+        self.updated_by = updated_by
+        self.save()
 
+    def delete(self, voided_by = None, *args, **kwargs):
+        self.isVoided = True
+        self.date_voided = timezone.now
+        if not self.void_reason:
+            self.void_reason = 'Voided without reason'
+        if not voided_by:
+            voided_by = User.objects.get(pk=1)
+        self.voided_by = voided_by
+        self.save()
 
-# User Model
-class User(models.Model):
-    # Affiliated as choices
-    AFFILIATED_AS_CHOICES = [
-        ('student', 'Student'),
-        ('faculty', 'Faculty'),
-        ('staff', 'Staff'),
-    ]
+    def undelete(self, *args, **kwargs):
+        if self.isVoided:
+            self.isVoided = False
+            self.date_voided = None
+            self.void_reason = None
+            self.save()
+    def purge(self, *args, **kwargs):
+        self.delete()
 
-    first_name = models.CharField(max_length=50)
-    last_name = models.CharField(max_length=50)
-    gender = models.CharField(max_length=10)
-    dob = models.DateField()
-    contact_numbers = models.CharField(max_length=100)
-    address = models.CharField(max_length=200)
-    landmark = models.CharField(max_length=100)
-    town = models.CharField(max_length=100)
-    gps_coordinates = models.CharField(max_length=50)
-    bio = models.TextField(blank=True)
-    affiliated_as = models.CharField(max_length=10, choices=AFFILIATED_AS_CHOICES)
-    creation_date = models.DateTimeField(default=timezone.now)
-    updation_date = models.DateTimeField(default=timezone.now)
-    created_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='created_users')
-    updated_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='updated_users')
-    is_active = models.BooleanField(default=True)
+    # Should have one-to-one relationship with a Django user
+class UserProfile(models.Model):
+    address_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True)
+    landmark = models.CharField(max_length=255, null=False)
+    town = models.CharField(max_length=50, null=False, choices=[(c, c) for c in TOWNS])
+    active = models.BooleanField(default=True, editable=False)
+    date_deactivated = models.DateTimeField(editable=False, null=True)
+    bio = models.TextField()
+    #Audit Fields
+    date_created = models.DateTimeField(default=timezone.now, null=True, editable=False, related_name='userprofile_creator')
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, null=True, editable=False)
+    date_updated = models.DateTimeField(null=True)
+    updated_by = models.ForeignKey(User,null=True, on_delete=models.CASCADE, related_name='userprofile_updater')
+    isVoided = models.BooleanField(default=False, null=True)
+    date_voided = models.DateTimeField(null=True)
+    voided_by = models.ForeignKey(User,null=True, on_delete=models.CASCADE, related_name='userprofile_voided')
+    void_reason = models.CharField(null=True, max_length=1024)
+    uuid = models.UUIDField(default=uuid4, editable=False, unique=True)
 
-    def __str__(self):
-        return f"{self.first_name} {self.last_name}"
-
-    def delete(self, *args, **kwargs):
-        if not self.user.is_staff:
-            raise PermissionDenied("Only staff members have permission to delete users.")
-        super().delete(*args, **kwargs)
-
-# Owner Model
-class Owner(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    date_joined = models.DateTimeField(default=timezone.now)
-    num_contracts = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name}"
 
+    def update(self, updated_by = None, *args, **kwargs):
+        self.date_updated = timezone.now
+        self.updated_by = updated_by
+        if not updated_by:
+            updated_by = User.objects.get(pk=1)
+        self.updated_by = updated_by
+        self.save()
 
-# Companion Model
-class Companion(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
-    currently_in_contract = models.BooleanField(default=False)
+    def delete(self, voided_by = None, *args, **kwargs):
+        self.isVoided = True
+        self.date_voided = timezone.now
+        if not self.void_reason:
+            self.void_reason = 'Voided without reason'
+        if not voided_by:
+            voided_by = User.objects.get(pk=1)
+        self.voided_by = voided_by
+        self.save()
 
-    def __str__(self):
-        return f"{self.user.first_name} {self.user.last_name}"
-
-
-class Contract(models.Model):
-    vehicle = models.ForeignKey(Vehicle, on_delete=models.PROTECT)
-    companion = models.ForeignKey(Companion, on_delete=models.PROTECT)
-    effective_start_date = models.DateField()
-    expiry_date = models.DateField()
-    is_active = models.BooleanField(default=True)
-    fuel_share = models.PositiveIntegerField()
-    maintenance_share = models.PositiveIntegerField()
-    schedule = models.JSONField()
-    creation_date = models.DateTimeField(auto_now_add=True)
-    updation_date = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='contracts_created')
-    updated_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='contracts_updated')
-    is_active = models.BooleanField(default=True)
-    schedule = models.DateTimeField()
-    def __str__(self):
-        return f"{self.vehicle.registration_number} - {self.companion.user.get_full_name()}"
-
-    def save(self, *args, **kwargs):
-        total_share = self.fuel_share + self.maintenance_share
-        if total_share > 100:
-            raise ValueError("Total share cannot exceed 100")
-        if self.expiry_date - self.effective_start_date > timezone.timedelta(days=180):
-            raise ValueError("Contract must not go on for more than 6 months")
-        super().save(*args, **kwargs)
-
-    def delete(self, *args, **kwargs):
-        if not self.user.is_staff:
-            raise PermissionDenied("Only staff members have permission to delete contracts.")
-        super().delete(*args, **kwargs)
-
+    def undelete(self, *args, **kwargs):
+        if self.isVoided:
+            self.isVoided = False
+            self.date_voided = None
+            self.void_reason = None
+            self.save()
+    def purge(self, *args, **kwargs):
+        self.delete()
